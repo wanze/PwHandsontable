@@ -1,0 +1,19 @@
+.pwhot_meta {
+	margin-bottom: 10px;
+}
+
+.pwhot_table td img {
+	display: inline;
+	height: 60px;
+	width: auto;
+	margin: 3px;
+}
+
+td.htFile a {
+	display: block;
+}
+
+.handsontable .htDimmed {
+	font-style: normal;
+	color: #4e4e4e;
+}
