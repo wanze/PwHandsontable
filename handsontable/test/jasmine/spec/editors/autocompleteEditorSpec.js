@@ -68,27 +68,66 @@ describe('AutocompleteEditor', function () {
   });
 
   it('should destroy editor when mouse double clicked then Esc', function () {
-    handsontable({
+    var hot = handsontable({
       autoComplete: getAutocompleteConfig(false)
     });
     selectCell(2, 2);
-    $(getCell(2, 2)).trigger("dblclick");
 
-    keyDownUp('esc');
+    mouseDoubleClick(getCell(2,2));
 
-    expect(isAutocompleteVisible()).toEqual(false);
+    waitsFor(function(){
+      return hot.autocompleteEditor.isMenuExpanded();
+    }, 'Autocomplete menu open', 1000);
+
+    runs(function(){
+      expect(isAutocompleteVisible()).toEqual(true);
+
+      keyDownUp('esc');
+
+      expect(isAutocompleteVisible()).toEqual(false);
+    });
   });
 
   it('should destroy editor when clicked outside the table', function () {
-    handsontable({
+    var hot = handsontable({
       autoComplete: getAutocompleteConfig(false)
     });
     selectCell(2, 2);
-    $(getCell(2, 2)).trigger("dblclick");
 
-    $('body').click();
+    mouseDoubleClick(getCell(2,2));
 
-    expect(isAutocompleteVisible()).toEqual(false);
+    waitsFor(function(){
+      return hot.autocompleteEditor.isMenuExpanded();
+    }, 'Autocomplete menu open', 1000);
+
+    runs(function(){
+      expect(isAutocompleteVisible()).toEqual(true);
+
+      $('body').mousedown();
+
+      expect(isAutocompleteVisible()).toEqual(false);
+    });
+
+
+  });
+
+  it('should restore the old value when hovered over a autocomplete menu item and then clicked outside of the table', function () {
+    handsontable({
+      autoComplete: getAutocompleteConfig(true)
+    });
+
+    selectCell(2, 2);
+
+    expect(getDataAtCell(2,2)).toBeNull();
+
+    keyDownUp('enter');
+
+    autocomplete().$menu.find('li:eq(1)').mouseenter();
+    autocomplete().$menu.find('li:eq(1)').mouseleave();
+
+    this.$container.mousedown();
+
+    expect(getDataAtCell(2,2)).toBeNull();
   });
 
   it('autocomplete textarea should have cell dimensions', function () {
@@ -203,6 +242,35 @@ describe('AutocompleteEditor', function () {
       var li = autocomplete().$menu.find('li');
       expect(li.length).toEqual(10);
     });
+  });
+
+  it('should use value not in list, when in non strict mode', function () {
+    handsontable({
+      data: [
+        ['one', 'two'],
+        ['three', 'four']
+      ],
+      columns: [
+        {
+          allowInvalid: false,
+          type: Handsontable.AutocompleteCell,
+          options: {items: 10}, //`options` overrides `defaults` defined in bootstrap typeahead
+          source: ['Acura', 'BMW', 'Bentley'],
+          strict: false
+        },
+        { type: 'text'}
+      ]
+    });
+
+    selectCell(0, 0);
+    keyDownUp('enter');
+    $('.handsontableInput').val('unexistent');
+    keyDownUp('enter');
+
+    expect(getData()).toEqual([
+      ['unexistent', 'two'],
+      ['three', 'four']
+    ]);
   });
 
   it('strict mode should not use value if it doesn\'t match the list (async reponse is empty)', function () {
@@ -451,4 +519,109 @@ describe('AutocompleteEditor', function () {
     });
 
   });
+
+  it("should fire one afterChange event when value is changed", function () {
+    var hot = handsontable({
+      autoComplete: getAutocompleteConfig(false)
+    });
+
+    var afterChangeCallback = jasmine.createSpy('afterChangeCallback');
+    hot.addHook('afterChange', afterChangeCallback);
+
+    selectCell(0,2);
+
+    keyDownUp('enter');
+
+    autocomplete().$menu.find('li:eq(1)').mouseenter().click();
+
+    expect(getDataAtCell(0,2)).toEqual('red');
+
+    expect(afterChangeCallback.calls.length).toEqual(1);
+    expect(afterChangeCallback).toHaveBeenCalledWith([[0, 2, null, 'red']], 'edit', undefined, undefined, undefined);
+  });
+
+  it("should allow any value in non strict mode (close editor with ENTER)", function () {
+    var hot = handsontable({
+      autoComplete: getAutocompleteConfig(false)
+    });
+
+    selectCell(0,2);
+
+    keyDownUp('enter');
+
+
+    var editor = $('.handsontableInput');
+    editor.val('foo');
+
+    keyDownUp('enter');
+
+    expect(getDataAtCell(0,2)).toEqual('foo');
+  });
+
+  it("should allow any value in non strict mode (close editor by clicking on table)", function () {
+    var hot = handsontable({
+      autoComplete: getAutocompleteConfig(false)
+    });
+
+    selectCell(0,2);
+
+    keyDownUp('enter');
+
+    var editor = $('.handsontableInput');
+    editor.val('foo');
+
+    this.$container.find('tbody tr:eq(0) td:eq(0)').mousedown();
+
+    expect(getDataAtCell(0,2)).toEqual('foo');
+  });
+
+  it("should invoke beginEditing only once after dobleclicking on a cell (#1011)", function () {
+    var hot = handsontable({
+      autoComplete: getAutocompleteConfig(false)
+    });
+
+    selectCell(0, 2);
+
+    spyOn(hot.autocompleteEditor, 'beginEditing');
+
+    expect(hot.autocompleteEditor.beginEditing.calls.length).toBe(0);
+
+    mouseDoubleClick(getCell(0, 2));
+
+    expect(hot.autocompleteEditor.beginEditing.calls.length).toBe(1);
+
+    mouseDoubleClick(getCell(1, 2));
+
+    expect(hot.autocompleteEditor.beginEditing.calls.length).toBe(2);
+
+    mouseDoubleClick(getCell(2, 2));
+
+    expect(hot.autocompleteEditor.beginEditing.calls.length).toBe(3);
+  });
+
+  it("should not affect other cell values after clicking on autocomplete cell (#1021)", function () {
+    var hot = handsontable({
+      autoComplete: getAutocompleteConfig(false),
+      data: [
+        [null, null, 'yellow', null],
+        [null, null, 'red', null],
+        [null, null, 'blue', null]
+      ]
+    });
+
+    expect(getCell(0, 2).innerText).toMatch('yellow');
+
+    mouseDoubleClick(getCell(0, 2));
+
+    expect(getCell(1, 2).innerText).toMatch('red');
+
+    mouseDoubleClick(getCell(1, 2));
+
+    expect(getCell(2, 2).innerText).toMatch('blue');
+
+    mouseDoubleClick(getCell(2, 2));
+
+    expect(getDataAtCol(2)).toEqual(['yellow', 'red', 'blue']);
+  });
+
 });

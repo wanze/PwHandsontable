@@ -51,6 +51,9 @@ var contextMenu = function () {
  */
 var handsontableMouseTriggerFactory = function (type) {
   return function (element) {
+    if(!(element instanceof jQuery)){
+      element = $(element);
+    }
     var ev = $.Event(type);
     ev.which = 1; //left mouse button
     element.trigger(ev);
@@ -59,6 +62,12 @@ var handsontableMouseTriggerFactory = function (type) {
 
 var mouseDown = handsontableMouseTriggerFactory('mousedown');
 var mouseUp = handsontableMouseTriggerFactory('mouseup');
+var mouseDoubleClick = function(element){
+    mouseDown(element);
+    mouseUp(element);
+    mouseDown(element);
+    mouseUp(element);
+};
 
 /**
  * Returns a function that triggers a key event
@@ -222,10 +231,12 @@ var selectCell = handsontableMethodFactory('selectCell');
 var deselectCell = handsontableMethodFactory('deselectCell');
 var getSelected = handsontableMethodFactory('getSelected');
 var setDataAtCell = handsontableMethodFactory('setDataAtCell');
+var setDataAtRowProp = handsontableMethodFactory('setDataAtRowProp');
 var getCell = handsontableMethodFactory('getCell');
 var getCellMeta = handsontableMethodFactory('getCellMeta');
 var getData = handsontableMethodFactory('getData');
 var getDataAtCell = handsontableMethodFactory('getDataAtCell');
+var getDataAtRowProp = handsontableMethodFactory('getDataAtRowProp');
 var getDataAtRow = handsontableMethodFactory('getDataAtRow');
 var getDataAtCol = handsontableMethodFactory('getDataAtCol');
 var getRowHeader = handsontableMethodFactory('getRowHeader');
@@ -239,6 +250,7 @@ var destroyEditor = handsontableMethodFactory('destroyEditor');
 var render = handsontableMethodFactory('render');
 var updateSettings = handsontableMethodFactory('updateSettings');
 var destroy = handsontableMethodFactory('destroy');
+var addHook = handsontableMethodFactory('addHook');
 
 /**
  * Creates 2D array of Excel-like values "A0", "A1", ...
@@ -264,6 +276,24 @@ function createSpreadsheetData(rowCount, colCount) {
   return rows;
 }
 
+function createSpreadsheetObjectData(rowCount, colCount) {
+  rowCount = typeof rowCount === 'number' ? rowCount : 100;
+  colCount = typeof colCount === 'number' ? colCount : 4;
+
+  var rows = []
+    , i
+    , j;
+
+  for (i = 0; i < rowCount; i++) {
+    var row = {};
+    for (j = 0; j < colCount; j++) {
+      row['prop'+j] = Handsontable.helper.spreadsheetColumnLabel(j) + i
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 /**
  * Returns column width for HOT container
  * @param $elem
@@ -271,9 +301,19 @@ function createSpreadsheetData(rowCount, colCount) {
  * @returns {Number}
  */
 function colWidth($elem, col) {
-  var TD = $elem[0].querySelector('TR').querySelectorAll('TD')[col];
+  var TD = $elem[0].querySelector('TBODY TR').querySelectorAll('TD')[col];
   if (!TD) {
     throw new Error("Cannot find table column of index '" + col + "'");
   }
   return TD.offsetWidth;
+}
+
+/**
+ * Returns value that has been rendered in table cell
+ * @param {Number} trIndex
+ * @param {Number} tdIndex
+ * @returns {String}
+ */
+function getRenderedValue(trIndex, tdIndex){
+  return spec().$container.find('tbody tr').eq(trIndex).find('td').eq(tdIndex).text();
 }

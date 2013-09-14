@@ -4,17 +4,15 @@
  */
 function HandsontableColumnSorting() {
   var plugin = this;
-  var sortingEnabled;
-
 
   this.init = function (source) {
     var instance = this;
     var sortingSettings = instance.getSettings().columnSorting;
     var sortingColumn, sortingOrder;
 
-    sortingEnabled = !!(sortingSettings);
+    instance.sortingEnabled = !!(sortingSettings);
 
-    if (sortingEnabled) {
+    if (instance.sortingEnabled) {
       instance.sortIndex = [];
 
       var loadedSortingState = loadSortingState.call(instance);
@@ -32,6 +30,10 @@ function HandsontableColumnSorting() {
         var args = Array.prototype.slice.call(arguments);
 
         return plugin.sortByColumn.apply(instance, args)
+      }
+
+      if (typeof instance.getSettings().observeChanges == 'undefined'){
+        enableObserveChangesPlugin.call(instance);
       }
 
       if (source == 'afterInit') {
@@ -126,6 +128,15 @@ function HandsontableColumnSorting() {
     }
   };
 
+  function enableObserveChangesPlugin () {
+    var instance = this;
+    instance.registerTimeout('enableObserveChanges', function(){
+      instance.updateSettings({
+        observeChanges: true
+      });
+    }, 0);
+  }
+
   function defaultSort(sortOrder) {
     return function (a, b) {
       if (a[1] === b[1]) {
@@ -172,7 +183,7 @@ function HandsontableColumnSorting() {
       return;
     }
 
-    sortingEnabled = false; //this is required by translateRow plugin hook
+    instance.sortingEnabled = false; //this is required by translateRow plugin hook
     instance.sortIndex.length = 0;
 
     var colOffset = this.colOffset();
@@ -197,12 +208,13 @@ function HandsontableColumnSorting() {
       this.sortIndex.push([i, instance.getDataAtCell(i, this.sortColumn + colOffset)]);
     }
 
-    sortingEnabled = true; //this is required by translateRow plugin hook
+    instance.sortingEnabled = true; //this is required by translateRow plugin hook
   };
 
   this.translateRow = function (row) {
-    if (sortingEnabled && this.sortIndex && this.sortIndex.length) {
-      return this.sortIndex[row][0];
+    var instance = this;
+    if (instance.sortingEnabled && instance.sortIndex && instance.sortIndex.length) {
+      return instance.sortIndex[row][0];
     }
     return row;
   };
@@ -228,8 +240,17 @@ function HandsontableColumnSorting() {
     }
   };
 
+  function isSorted(instance){
+    return typeof instance.sortColumn != 'undefined';
+  }
+
   this.afterCreateRow = function(index, amount){
     var instance = this;
+
+    if(!isSorted(instance)){
+      return;
+    }
+
     instance.sortIndex.splice(index, 0, [index, instance.getData()[index][this.sortColumn + instance.colOffset()]]);
 
     for(var i = 0; i < instance.sortIndex.length; i++){
@@ -246,6 +267,11 @@ function HandsontableColumnSorting() {
 
   this.afterRemoveRow = function(index, amount){
     var instance = this;
+
+    if(!isSorted(instance)){
+      return;
+    }
+
     instance.sortIndex.splice(index, amount);
 
     for(var i = 0; i < instance.sortIndex.length; i++){

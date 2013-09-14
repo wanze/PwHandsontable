@@ -278,4 +278,113 @@ describe('TextEditor', function () {
 
   });
 
+  it("should open editor after pressing a printable character", function () {
+    var hot = handsontable({
+      data: createSpreadsheetData(3, 3)
+    });
+
+    selectCell(0, 0);
+
+    var editorHolder = $('.handsontableInputHolder');
+    var editorInput = editorHolder.find('.handsontableInput');
+
+    expect(editorHolder.is(':visible')).toBe(false);
+
+    var keyboardEvent = $.Event('keydown', {
+      keyCode: 'a'.charCodeAt(0)
+    });
+
+    this.$container.trigger(keyboardEvent);
+
+    expect(editorHolder.is(':visible')).toBe(true);
+  });
+
+  it("should open editor after pressing a printable character with shift key", function () {
+    var hot = handsontable({
+      data: createSpreadsheetData(3, 3)
+    });
+
+    selectCell(0, 0);
+
+    var editorHolder = $('.handsontableInputHolder');
+    var editorInput = editorHolder.find('.handsontableInput');
+
+    expect(editorHolder.is(':visible')).toBe(false);
+
+
+    /**
+     * To reliably mimic SHIFT+SOME_KEY combination we have to trigger two events.
+     * First we need to trigger keydown event with SHIFT keyCode (16)
+     * and then trigger a keydown event with keyCode of SOME_KEY and shiftKey property set to true
+     */
+    var shiftKeyboardEvent = $.Event('keydown', {
+      keyCode: 16, //shift
+      shiftKey: true
+    });
+
+    var keyboardEvent = $.Event('keydown', {
+      keyCode: 'a'.charCodeAt(0),
+      shiftKey: true
+    });
+
+    this.$container.trigger(shiftKeyboardEvent);
+    this.$container.trigger(keyboardEvent);
+
+    expect(editorHolder.is(':visible')).toBe(true);
+  });
+
+  it("should be able to open editor after clearing cell data with DELETE", function () {
+    var hot = handsontable({
+      data: createSpreadsheetData(3, 3)
+    });
+
+    selectCell(0, 0);
+
+    var editorHolder = $('.handsontableInputHolder');
+    var editorInput = editorHolder.find('.handsontableInput');
+
+    expect(editorHolder.is(':visible')).toBe(false);
+
+    var deleteKeyboardEvent = $.Event('keydown', {
+      keyCode: 46 //delete
+    });
+
+    var keyboardEvent = $.Event('keydown', {
+      keyCode: 'a'.charCodeAt(0)
+    });
+
+    this.$container.trigger(deleteKeyboardEvent);
+    this.$container.trigger(keyboardEvent);
+
+    expect(editorHolder.is(':visible')).toBe(true);
+  });
+
+
+  it("should be able to open editor after clearing cell data with BACKSPACE", function () {
+    var hot = handsontable({
+      data: createSpreadsheetData(3, 3)
+    });
+
+    selectCell(0, 0);
+
+    var editorHolder = $('.handsontableInputHolder');
+    var editorInput = editorHolder.find('.handsontableInput');
+
+    expect(editorHolder.is(':visible')).toBe(false);
+
+    var backspaceKeyboardEvent = $.Event('keydown', {
+      keyCode: 8 //backspace
+    });
+
+    var keyboardEvent = $.Event('keydown', {
+      keyCode: 'a'.charCodeAt(0)
+    });
+
+    this.$container.trigger(backspaceKeyboardEvent);
+    this.$container.trigger(keyboardEvent);
+
+    expect(editorHolder.is(':visible')).toBe(true);
+  });
+
+
 });

@@ -1,7 +1,7 @@
 <?php
 
 /**
-* PwHandsontable Module v 0.9
+* PwHandsontable Module v 1.0
 * Integration of JQuery Plugin "Handsontable" in ProcessWire
 *
 * @author Stefan Wanzenried (Wanze)
@@ -16,38 +16,46 @@
 */
 class PwHandsontable extends WireData implements Module {
 
-	const modeView = 1; // Display data as readOnly eventually, optional with actions column
+	const modeView = 1; // Display data as readOnly
 	const modeEdit = 2; // Fields not readOnly are editable in the table
 	const modeNew  = 3; // Empty table - insert data to create new Pages. First row = name of fields
 
 	static $instance = 0;
-
+	
+	/**
+	 * PageArray with pages to display in the table
+	 */
+	protected $foundPages;
+	
+	/**
+	 * Unique ID for this instance
+	 */
+	protected $id;
+	
+	/**
+	 * True if an ajax request is sent which matches this instance
+	 */
+	protected $isAjax = false;
+	
 	/**
 	 * Default module config options
 	 */
 	protected static $defaultConfig = array(
 		// Default columns to display in the table if no columns or template has been specified
 		'columns' => array('id', 'title', 'name', 'path', 'template'),
-		// Setting colWidths seems necessary when using custom renderers (currently image/file)
 		// Add width in px for each column, e.g. array(40,100,200...)
 		'colWidths' => array(),
 		// Javascript config passed to Handsontable
-		'jsConfig' => array('columnSorting' => true, 'manualColumnResize' => true),
+		'jsConfig' => array(
+			'columnSorting' => true, 
+			'manualColumnResize' => true,
+			'currentRowClassName' => 'pwhot_currentRow',
+			'currentColClassName' => 'pwhot_currentCol',
+		),
 		'limit' => 25,
-		'parent' => '',
-		'template' => '',
-		'sort' => '',
-		'includeHidden' => '',
-		'includeAll' => '',
 		'selector' => '',
 		'dateFormat' => 'Y-m-d',
-		// Display a filter for searching values in table
-		'showFilter' => true,
-		// Display actions in last column
-		'showActions' => true,
-		// Actions to display
-		'actions' => array('edit'),
-		'mode' => self::modeView,
+		'mode' => self::modeEdit,
 	);
 
 
@@ -73,7 +81,7 @@ class PwHandsontable extends WireData implements Module {
 	);
 
 	/**
-	 * Supported native fields to display in table
+	 * Supported native fields (and a few fictive) to display in table
 	 * Those fields are separated because we can't get them with wire('fields')->get()
 	 */
 	protected static $nativeFields = array(
@@ -88,7 +96,6 @@ class PwHandsontable extends WireData implements Module {
 		'visible' => array('renderer' => 'checkbox'),
 		'created' => array('renderer' => 'text', 'readOnly' => true),
 		'modified' => array('renderer' => 'text', 'readOnly' => true),
-		'actions' => array('renderer' => 'html', 'readOnly' => true),
 	);
 
 
@@ -96,7 +103,9 @@ class PwHandsontable extends WireData implements Module {
 
 		// Use WireDatas set()/get() for the module config
 		$this->data = self::$defaultConfig;
+		// Distinct instances if multiple PwHandsontable modules are executed on the same page
 		self::$instance++;
+		$this->id = 'pwhot_' . self::$instance;
 		$this->setTrackChanges(true);
 
 	}
@@ -109,7 +118,7 @@ class PwHandsontable extends WireData implements Module {
 
 		return array(
 			'title' => 'ProcessWire Handsontable',
-			'summary' => 'CRUD functionality for ProcessWire pages/data with the Handsontable Jquery plugin',
+			'summary' => 'CRUD functionality for ProcessWire pages/data with the Handsontable JQuery plugin',
 			'version' => 100,
 			'permanent' => false,
 		);
@@ -121,13 +130,17 @@ class PwHandsontable extends WireData implements Module {
 	 * Load Javascript and CSS
 	 */
 	public function init() {
-
-		$this->config->scripts->append($this->config->urls->PwHandsontable . 'handsontable/dist/jquery.handsontable.full.js');
-		$this->config->scripts->append($this->config->urls->PwHandsontable . 'PwHandsontable.js');
-		$this->config->styles->append($this->config->urls->PwHandsontable . 'handsontable/dist/jquery.handsontable.full.css');
-		$this->config->styles->append($this->config->urls->PwHandsontable . 'PwHandsontable.css');
-		$this->modules->get('JqueryFancybox');
-
+		
+		if (!$this->config->ajax) {
+			$this->config->scripts->append($this->config->urls->PwHandsontable . 'handsontable/dist/jquery.handsontable.full.js');
+			$this->config->scripts->append($this->config->urls->PwHandsontable . 'PwHandsontable.js');
+			$this->config->styles->append($this->config->urls->PwHandsontable . 'handsontable/dist/jquery.handsontable.full.css');
+			$this->config->styles->append($this->config->urls->PwHandsontable . 'PwHandsontable.css');
+			$this->config->js('pwhot_url', $this->page->url);
+		} else {
+			if ($this->input->get->pwhot_id == $this->id) $this->isAjax = true;		
+		}
+				
 	}
 
 
@@ -154,27 +167,75 @@ class PwHandsontable extends WireData implements Module {
 
 
 	/**
-	 * Renders the table by setting up the required javascript of Handsontable
-	 * @return Javascript + HTML Markup
+	 * Renders the table or handles actions sent with ajax
 	 */
 	public function render() {
-
-		$out = '';
-		if ($this->showFilter) {
-			$out .= "<div class='pwhot_meta'>";
-			$out .= $this->_('Filter') . " <input type='text' class='pwhot_filter'>";
-			$out .= "</div>";
-		}
-		$id = 'pwhot_' . self::$instance;
-		$out .= "<div id='{$id}' class='pwhot_table'></div>";
-		$out .= "<script>";
-		$config = $this->buildJsConfig();
-		$out .= "$('#{$id}').handsontable(" . $config . ");";
-		$out .= "</script>";
-		return $out;
-
+				
+		if (!$this->selector) throw new WireException('You must provide a selector string');
+		
+		if ($this->isAjax) {
+			switch ($this->input->get->action) {
+				case 'save' :
+					$this->editPages();
+					break;
+				case 'new' :
+					$this->createPages();
+					break;
+			}
+		} 
+		
+		// No actions to perform, render HTML + JS for this instance
+		return $this->_render();
+				
 	}
-
+	
+	/**
+	 *
+	 *
+	 */
+	protected function _render() {
+		
+		$config = rtrim($this->buildJsConfig(), '}');		
+		$out = "<div id='{$this->id}' class='pwhot_table'></div>
+		        <script>
+		        
+		        PwHOT.url = '{$this->page->url}';
+		        PwHOT.changedData.{$this->id} = [];
+		        
+		        $('#{$this->id}').handsontable(
+		          $config,
+		          afterChange : function(changes, source) {
+		            if (!changes) return;
+		            var data = {
+		              'id' : $('#{$this->id}').handsontable('getInstance').getData()[changes[0][0]]['id'],
+		              'field' : changes[0][1],
+		              'value' : changes[0][3],
+		            };
+		            PwHOT.changedData.{$this->id}.push(data);
+		            console.log(PwHOT);
+		            $('.pwhot_save').removeClass('ui-state-disabled');
+		          }
+		        });
+		        </script>";
+		
+		// Paging
+		$out .= $this->foundPages->renderPager(array(
+			'listMarkup' => "<ul class='MarkupPagerNav' data-id='{$this->id}'>{out}</ul>",
+		));
+		
+		// Display Save button in edit mode
+		if ($this->mode == self::modeEdit) {
+			$button = $this->modules->get('InputfieldButton');
+			$button->attr('value', $this->_('Save Changes'));
+			$button->attr('class', 'pwhot_save ui-button ui-widget ui-corner-all ui-state-default ui-state-disabled');
+			$button->attr('data-id', $this->id);
+			$out .= $button->render();
+		}
+				
+		return $out;			
+		
+	}
+	
 	/**
 	 * Build the Javascript config options for Handsontable
 	 * @return JSON
@@ -197,9 +258,9 @@ class PwHandsontable extends WireData implements Module {
 
 		// Append custom handsontable configs
 		foreach ($this->jsConfig as $k => $v) $config[$k] = $v;
-
+				
 		//echo '<pre>' . json_encode($config) . '</pre>';
-		return wireEncodeJSON($config);
+		return json_encode($config);
 
 	}
 
@@ -211,20 +272,16 @@ class PwHandsontable extends WireData implements Module {
 
 		// If we display data from one template, we'll use compatible fields of the template as columns
 		// But only if the developer did not specify columns explicitly with ->columns = array('col1', 'col2')
-		// TODO: If there's a selector specified with a template, should we extract the template and set it to $this->template?
 		$columns = $this->columns;
-		if ($this->template && !$this->isChanged('columns')) {
+		$hasTemplate = preg_match('/template=([\w-]+)/i', $this->selector, $template);
+		if ($hasTemplate && !$this->isChanged('columns')) {
 			$columns = array();
-			$fields = $this->templates->get($this->template)->fields;
+			$fields = $this->templates->get($template[1])->fields;
 			foreach ($fields as $field) {
 				if ($this->isSupportedField($field) && !in_array($field, $columns)) {
 					$columns[] = (string) $field;
 				}
 			}
-		}
-
-		if ($this->showActions && ($this->mode == self::modeView || $this->mode == self::modeEdit)) {
-			$columns[] = 'actions';
 		}
 
 		$this->columns = $columns;
@@ -247,25 +304,10 @@ class PwHandsontable extends WireData implements Module {
 	 */
 	protected function getFormattedData() {
 
-		// Build the selector for searching the pages - exclude admin pages
-		$selector = "has_parent!={$this->config->adminRootPageID}";
-
-		if ($this->selector) {
-			$selector = $this->selector;
-		} else {
-			if ($this->template) $selector .= ",template={$this->template}";
-			if ($this->parent) $selector .= ",parent={$this->parent}";
-			if ($this->sort) $selector .= ",sort={$this->sort}";
-			if ($this->includeHidden) $selector .= ",include_hidden";
-			if ($this->includeAll) $selector .= ",include_all";
-		}
-
-		// Make really sure we limit the amount of pages
-		if (strpos($selector, 'limit') === false) $selector .= ",limit={$this->limit}";
-
+		$selector = $this->buildSelector();
 		$data = array();
-		$pages = $this->pages->find($selector);
-		foreach ($pages as $page) {
+		$this->foundPages = $this->pages->find($selector);
+		foreach ($this->foundPages as $page) {
 			if (!$page->viewable()) continue;
 			$page->of(true);
 			$row = array();
@@ -275,17 +317,28 @@ class PwHandsontable extends WireData implements Module {
 			foreach ($this->columns as $col) {
 				$row[$col] = $this->getCellValue($page, $col);
 			}
-
-			if ($this->showActions && $this->mode != self::modeNew) {
-				$row['actions'] = "<a class='pwhot_fancybox' href='{$this->config->urls->admin}page/edit/?id={$page->id}&modal=1'>edit</a>";
-			}
-
 			$data[] = $row;
 		}
 
 		return $data;
 	}
 
+	
+	/**
+	 * Build the selector to search the pages
+	 * @return Selector string
+	 */
+	protected function buildSelector() {
+		
+		$selector  = $this->selector;
+		// Exclude admin pages
+		$selector .= ",has_parent!={$this->config->adminRootPageID}";
+		// Make really sure we limit the amount of pages
+		if (strpos($selector, 'limit') === false) $selector .= ",limit={$this->limit}";
+		
+		return $selector;
+		
+	}
 
 	/**
 	 * Return the handsontable renderer for the given field
@@ -385,7 +438,7 @@ class PwHandsontable extends WireData implements Module {
 					$value = array();
 					foreach ($field as $f) $value[] = $f->url;
 				} else {
-				$value = (string) $field;
+					$value = (string) $field;
 			}
 		}
 
@@ -396,6 +449,62 @@ class PwHandsontable extends WireData implements Module {
 	protected function isNativeField($fieldName) {
 		return in_array($fieldName, array_keys(self::$nativeFields));
 	}
-
+	
+	/**
+	 * Called if there was a request to save the modified fields
+	 * @return JSON
+	 */
+	protected function editPages() {
+				
+		if (!$this->input->get->data) return;		
+				
+		$out = array();
+		
+		// Store changed data in optimized array for saving the pages afterwards
+		$mods = array();
+		$data = json_decode($this->input->get->data, true);
+		foreach ($data as $k => $v) {
+			if (!isset($mods[$v['id']])) $mods[$v['id']] = array();
+			$mods[$v['id']][] = array('field' => $v['field'], 'value' => $v['value']);
+		}
+		
+		//print_r($mods); die();
+				
+		$saved = 0;
+		
+		// Save changes
+		foreach ($mods as $id => $changes) {
+			$page = $this->pages->get($id);
+			if (!$page->editable()) continue;
+			$page->of(false);
+			foreach ($changes as $c) {
+				switch($c['field']) {
+					case 'unpublished':
+						if ($c['value'] == 1) { 
+							$page->addStatus(Page::statusUnpublished);
+						} else {
+							$page->removeStatus(Page::statusUnpublished);	
+						} 
+						break;
+					case 'hidden':
+						if ($c['value'] == 1) { 
+							$page->addStatus(Page::statusHidden);
+						} else {
+							$page->removeStatus(Page::statusHidden);	
+						} 
+						break;
+					default:
+						$page->set($c['field'], $c['value']);
+						break;
+				}
+			}
+			$page->save();
+			$saved++;
+		}
+		
+		echo 'Saved ' + $saved + 'pages';
+		exit;
+		
+	}
 
 }

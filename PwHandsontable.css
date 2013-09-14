@@ -1,7 +1,3 @@
-.pwhot_meta {
-	margin-bottom: 10px;
-}
-
 .pwhot_table td img {
 	display: inline;
 	height: 60px;
@@ -9,11 +5,22 @@
 	margin: 3px;
 }
 
+.pwhot_table td.htImage {
+	width: 150px;
+}
+
 td.htFile a {
 	display: block;
 }
 
 .handsontable .htDimmed {
-	font-style: normal;
-	color: #4e4e4e;
+	background: #fdfdfd;
+}
+
+.handsontable .pwhot_currentRow {
+	background: #E4EBEE;
+}
+
+.handsontable .pwhot_currentCol {
+	background: #ffffff;
 }
